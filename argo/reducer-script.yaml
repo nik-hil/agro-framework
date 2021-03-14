@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reducer-script
+  namespace: argo
+data:
+  reducer.py: |
+    import json
+    import os
+    import sys
+    iexpr = ""
+    with open("/results/question.txt") as f:
+      iexpr = f.read()
+      print("Expr is: ", iexpr)
+    for file in os.listdir("/results"):
+      if file.endswith(".json"):
+        with open("/results/" + file) as f:
+          val = f.read().strip()
+          iexpr = iexpr.replace((file.split('.')[0]+"!").strip(), val)
+    print("Expr after replacement is: ", iexpr)
+    
+    with open("/results/ans.txt","w") as f:
+      ans = str(eval(iexpr))
+      f.write(ans)

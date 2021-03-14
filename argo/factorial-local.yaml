@@ -1,0 +1,133 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: map-reduce-
+spec:
+  entrypoint: main
+  artifactRepositoryRef:
+    key: minio
+  volumeClaimTemplates:
+    - metadata:
+        name: workdir
+      spec:
+        accessModes: ["ReadWriteMany"]
+        resources:
+          requests:
+            storage: 1Mi
+        
+  arguments:
+    parameters:
+      - name: iExpr
+        value: "4! + 5!"
+  templates:
+    - name: main
+      dag:
+        tasks:
+          
+          - name: question
+            template: question
+            arguments:
+              parameters:
+                - name: iExpr
+                  value: "{{workflow.parameters.iExpr}}"
+          - name: split
+            template: split
+            arguments:
+              parameters:
+                - name: iExpr
+                  value: "{{workflow.parameters.iExpr}}"
+          - name: factorial
+            template: factorial
+            arguments:
+              parameters:
+              - name: num
+                value: "{{item}}"
+            withParam: "{{tasks.split.outputs.result}}"
+            dependencies:
+              - split
+          - name: reduce
+            template: reduce
+            arguments:
+              parameters:
+                - name: iExpr
+                  value: "{{workflow.parameters.iExpr}}"
+            dependencies:
+              - factorial
+              - question
+          - name: print
+            template: print-message
+            dependencies:
+              - reduce
+            
+    - name: split
+      inputs:
+        parameters:
+          - name: iExpr
+      script:
+        image: python:alpine3.6
+        command:
+          - python
+        source: |
+          import json
+          import sys
+          import re
+          iexpr = "{{inputs.parameters.iExpr}}"
+          nums = re.findall("\d+", iexpr)
+          json.dump(nums, sys.stdout)
+
+    - name: question
+      inputs:
+        parameters:
+          - name: iExpr
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args: ["num=\"{{inputs.parameters.iExpr}}\";echo $num > /results/question.txt;"]
+        volumeMounts:
+        - name: workdir
+          mountPath: /results
+    
+    - name: factorial
+      inputs:
+        parameters:
+          - name: num
+      
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args: ["num={{inputs.parameters.num}}; fact=1; for i in `seq 2 $num`; do   fact=$((fact * i)) ; done; echo $fact > /results/{{inputs.parameters.num}}.json;"]
+        volumeMounts:
+        - name: workdir
+          mountPath: /results
+
+    - name: reduce
+      volumes:
+      - name: reducer-script
+        configMap:
+          name: reducer-script
+          defaultMode: 0777
+      inputs:
+        parameters:
+          - name: iExpr
+      container:
+        image: python:alpine3.6
+        command:
+          - python  
+        args: [/reducer-script/reducer.py]
+        
+        volumeMounts:
+        - name: workdir
+          mountPath: /results
+        - mountPath: /reducer-script
+          name: reducer-script
+
+    - name: print-message
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args: ["echo Ans of, ` cat /results/question.txt `  = ` cat /results/ans.txt; `"]
+        volumeMounts:
+        - name: workdir
+          mountPath: /results
+      
+      

@@ -1,0 +1,20 @@
+argo submit -n argo --watch https://raw.githubusercontent.com/argoproj/argo-workflows/master/examples/hello-world.yaml
+argo list -n argo
+argo get -n argo @latest
+argo logs -n argo @latest
+
+kubectl -n argo port-forward deployment/argo-server 2746:2746
+
+kubectl -n argo port-forward minio 9000:9000
+
+kubectl delete po -n argo -l workflows.argoproj.io/completed=true
+
+
+argo submit -n argo --watch  dag.yaml -p iExpr="10! - 5! / 3! + 4! "
+argo logs -n argo @latest
+
+argo submit -n argo --watch  dag.yaml -p iExpr="10! - 5! * 3! / 4! "
+argo logs -n argo @latest
+
+
+kubectl get nodes --kubeconfig=./exercise_config
